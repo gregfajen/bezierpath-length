@@ -10,25 +10,25 @@ import CoreGraphics
 import Foundation
 
 #if os(macOS)
-    import AppKit
-    typealias BezierPath = NSBezierPath
+import AppKit
+typealias BezierPath = NSBezierPath
 #else
-    import UIKit
-    typealias BezierPath = UIBezierPath
+import UIKit
+typealias BezierPath = UIBezierPath
 #endif
 
 #if os(macOS)
 
-    // http://stackoverflow.com/questions/1815568/how-can-i-convert-nsbezierpath-to-cgpath
-    public extension NSBezierPath {
-        var cgPath: CGPath {
-            let path = CGMutablePath()
-            var points = [CGPoint](repeating: .zero, count: 3)
+// http://stackoverflow.com/questions/1815568/how-can-i-convert-nsbezierpath-to-cgpath
+public extension NSBezierPath {
+    var cgPath: CGPath {
+        let path = CGMutablePath()
+        var points = [CGPoint](repeating: .zero, count: 3)
 
-            for i in 0 ..< elementCount {
-                let type = element(at: i, associatedPoints: &points)
+        for i in 0 ..< elementCount {
+            let type = element(at: i, associatedPoints: &points)
 
-                switch type {
+            switch type {
                 case .moveTo:
                     path.move(to: points[0])
 
@@ -43,12 +43,12 @@ import Foundation
 
                 @unknown default:
                     fatalError()
-                }
             }
-
-            return path
         }
+
+        return path
     }
+}
 
 #endif
 
@@ -100,81 +100,20 @@ extension CGPath {
 
         for e in elements {
             switch e {
-            case let .move(to: p0):
-                currentPoint = p0
+                case let .move(to: p0):
+                    currentPoint = p0
 
-                if firstPointInSubpath == nil {
-                    firstPointInSubpath = p0
-                }
+                    if firstPointInSubpath == nil {
+                        firstPointInSubpath = p0
+                    }
 
-            case let .addLine(to: p1):
+                case let .addLine(to: p1):
 
-                guard let p0 = currentPoint else {
-                    assertionFailure("Expected current point")
-                    break
-                }
+                    guard let p0 = currentPoint else {
+                        assertionFailure("Expected current point")
+                        break
+                    }
 
-                let l = linearLength(p0: p0, p1: p1)
-
-                if lengthTraversed + l >= percentLength {
-                    let lengthInSubpath = percentLength - lengthTraversed
-
-                    let t = lengthInSubpath / l
-
-                    return linearPoint(t: t, p0: p0, p1: p1)
-                }
-
-                lengthTraversed += l
-
-                currentPoint = p1
-
-            case let .addQuadCurve(c1, to: p1):
-
-                guard let p0 = currentPoint else {
-                    assertionFailure("Expected current point")
-                    break
-                }
-
-                let l = quadCurveLength(p0: p0, c1: c1, p1: p1)
-
-                if lengthTraversed + l >= percentLength {
-                    let lengthInSubpath = percentLength - lengthTraversed
-
-                    let t = lengthInSubpath / l
-                    return quadCurvePoint(t: t, p0: p0, c1: c1, p1: p1)
-                }
-
-                lengthTraversed += l
-
-                currentPoint = p1
-
-            case let .addCurve(c1, c2, to: p1):
-
-                guard let p0 = currentPoint else {
-                    assertionFailure("Expected current point")
-                    break
-                }
-
-                let l = cubicCurveLength(p0: p0, c1: c1, c2: c2, p1: p1)
-
-                if lengthTraversed + l >= percentLength {
-                    let lengthInSubpath = percentLength - lengthTraversed
-
-                    let t = lengthInSubpath / l
-                    return cubicCurvePoint(t: t, p0: p0, c1: c1, c2: c2, p1: p1)
-                }
-
-                lengthTraversed += l
-
-                currentPoint = p1
-
-            case .closeSubpath:
-
-                guard let p0 = currentPoint else {
-                    break
-                }
-
-                if let p1 = firstPointInSubpath {
                     let l = linearLength(p0: p0, p1: p1)
 
                     if lengthTraversed + l >= percentLength {
@@ -188,9 +127,70 @@ extension CGPath {
                     lengthTraversed += l
 
                     currentPoint = p1
-                }
 
-                firstPointInSubpath = nil
+                case let .addQuadCurve(c1, to: p1):
+
+                    guard let p0 = currentPoint else {
+                        assertionFailure("Expected current point")
+                        break
+                    }
+
+                    let l = quadCurveLength(p0: p0, c1: c1, p1: p1)
+
+                    if lengthTraversed + l >= percentLength {
+                        let lengthInSubpath = percentLength - lengthTraversed
+
+                        let t = lengthInSubpath / l
+                        return quadCurvePoint(t: t, p0: p0, c1: c1, p1: p1)
+                    }
+
+                    lengthTraversed += l
+
+                    currentPoint = p1
+
+                case let .addCurve(c1, c2, to: p1):
+
+                    guard let p0 = currentPoint else {
+                        assertionFailure("Expected current point")
+                        break
+                    }
+
+                    let l = cubicCurveLength(p0: p0, c1: c1, c2: c2, p1: p1)
+
+                    if lengthTraversed + l >= percentLength {
+                        let lengthInSubpath = percentLength - lengthTraversed
+
+                        let t = lengthInSubpath / l
+                        return cubicCurvePoint(t: t, p0: p0, c1: c1, c2: c2, p1: p1)
+                    }
+
+                    lengthTraversed += l
+
+                    currentPoint = p1
+
+                case .closeSubpath:
+
+                    guard let p0 = currentPoint else {
+                        break
+                    }
+
+                    if let p1 = firstPointInSubpath {
+                        let l = linearLength(p0: p0, p1: p1)
+
+                        if lengthTraversed + l >= percentLength {
+                            let lengthInSubpath = percentLength - lengthTraversed
+
+                            let t = lengthInSubpath / l
+
+                            return linearPoint(t: t, p0: p0, p1: p1)
+                        }
+
+                        lengthTraversed += l
+
+                        currentPoint = p1
+                    }
+
+                    firstPointInSubpath = nil
             }
         }
 
@@ -207,59 +207,59 @@ extension CGPath {
 
         for e in elements {
             switch e {
-            case let .move(to: p0):
-                currentPoint = p0
+                case let .move(to: p0):
+                    currentPoint = p0
 
-                if firstPointInSubpath == nil {
-                    firstPointInSubpath = p0
-                }
+                    if firstPointInSubpath == nil {
+                        firstPointInSubpath = p0
+                    }
 
-            case let .addLine(to: p1):
+                case let .addLine(to: p1):
 
-                guard let p0 = currentPoint else {
-                    assertionFailure("Expected current point")
-                    break
-                }
+                    guard let p0 = currentPoint else {
+                        assertionFailure("Expected current point")
+                        break
+                    }
 
-                length += linearLength(p0: p0, p1: p1)
-
-                currentPoint = p1
-
-            case let .addQuadCurve(c1, to: p1):
-
-                guard let p0 = currentPoint else {
-                    assertionFailure("Expected current point")
-                    break
-                }
-
-                length += quadCurveLength(p0: p0, c1: c1, p1: p1)
-
-                currentPoint = p1
-
-            case let .addCurve(c1, c2, to: p1):
-
-                guard let p0 = currentPoint else {
-                    assertionFailure("Expected current point")
-                    break
-                }
-
-                length += cubicCurveLength(p0: p0, c1: c1, c2: c2, p1: p1)
-
-                currentPoint = p1
-
-            case .closeSubpath:
-
-                guard let p0 = currentPoint else {
-                    break
-                }
-
-                if let p1 = firstPointInSubpath {
                     length += linearLength(p0: p0, p1: p1)
 
                     currentPoint = p1
-                }
 
-                firstPointInSubpath = nil
+                case let .addQuadCurve(c1, to: p1):
+
+                    guard let p0 = currentPoint else {
+                        assertionFailure("Expected current point")
+                        break
+                    }
+
+                    length += quadCurveLength(p0: p0, c1: c1, p1: p1)
+
+                    currentPoint = p1
+
+                case let .addCurve(c1, c2, to: p1):
+
+                    guard let p0 = currentPoint else {
+                        assertionFailure("Expected current point")
+                        break
+                    }
+
+                    length += cubicCurveLength(p0: p0, c1: c1, c2: c2, p1: p1)
+
+                    currentPoint = p1
+
+                case .closeSubpath:
+
+                    guard let p0 = currentPoint else {
+                        break
+                    }
+
+                    if let p1 = firstPointInSubpath {
+                        length += linearLength(p0: p0, p1: p1)
+
+                        currentPoint = p1
+                    }
+
+                    firstPointInSubpath = nil
             }
         }
 

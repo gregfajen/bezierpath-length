@@ -30,16 +30,18 @@ enum PathElement {
 
     init(element: CGPathElement) {
         switch element.type {
-        case .moveToPoint:
-            self = .move(to: element.points[0])
-        case .addLineToPoint:
-            self = .addLine(to: element.points[0])
-        case .addQuadCurveToPoint:
-            self = .addQuadCurve(element.points[0], to: element.points[1])
-        case .addCurveToPoint:
-            self = .addCurve(element.points[0], element.points[1], to: element.points[2])
-        case .closeSubpath:
-            self = .closeSubpath
+            case .moveToPoint:
+                self = .move(to: element.points[0])
+            case .addLineToPoint:
+                self = .addLine(to: element.points[0])
+            case .addQuadCurveToPoint:
+                self = .addQuadCurve(element.points[0], to: element.points[1])
+            case .addCurveToPoint:
+                self = .addCurve(element.points[0], element.points[1], to: element.points[2])
+            case .closeSubpath:
+                self = .closeSubpath
+            @unknown default:
+                fatalError()
         }
     }
 }

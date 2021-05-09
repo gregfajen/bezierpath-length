@@ -1,4 +1,4 @@
-@testable import bezierpath_length
+@testable import BezierPathLength
 import XCTest
 
-final class bezierpath_lengthTests: XCTestCase {}
+final class BezierPathLengthTests: XCTestCase {}
