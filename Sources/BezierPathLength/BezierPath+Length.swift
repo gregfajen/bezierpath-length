@@ -6,443 +6,371 @@
 //  Copyright © 2016 Silver Fox. All rights reserved.
 //
 
-import Foundation
 import CoreGraphics
+import Foundation
 
 #if os(macOS)
-	import AppKit
-	typealias BezierPath = NSBezierPath
+    import AppKit
+    typealias BezierPath = NSBezierPath
 #else
-	import UIKit
-	typealias BezierPath = UIBezierPath
+    import UIKit
+    typealias BezierPath = UIBezierPath
 #endif
 
 #if os(macOS)
 
-	// http://stackoverflow.com/questions/1815568/how-can-i-convert-nsbezierpath-to-cgpath
-	extension NSBezierPath {
+    // http://stackoverflow.com/questions/1815568/how-can-i-convert-nsbezierpath-to-cgpath
+    public extension NSBezierPath {
+        var cgPath: CGPath {
+            let path = CGMutablePath()
+            var points = [CGPoint](repeating: .zero, count: 3)
 
-		public var cgPath: CGPath {
-			let path = CGMutablePath()
-			var points = [CGPoint](repeating: .zero, count: 3)
+            for i in 0 ..< elementCount {
+                let type = element(at: i, associatedPoints: &points)
 
-			for i in 0 ..< self.elementCount {
-				let type = self.element(at: i, associatedPoints: &points)
+                switch type {
+                case .moveTo:
+                    path.move(to: points[0])
 
-				switch type {
+                case .lineTo:
+                    path.addLine(to: points[0])
 
-                    case .moveTo:
-					path.move(to: points[0])
+                case .curveTo:
+                    path.addCurve(to: points[2], control1: points[0], control2: points[1])
 
-                    case .lineTo:
-					path.addLine(to: points[0])
+                case .closePath:
+                    path.closeSubpath()
 
-                    case .curveTo:
-					path.addCurve(to: points[2], control1: points[0], control2: points[1])
-
-                    case .closePath:
-					path.closeSubpath()
-
-                    @unknown default:
-                        fatalError()
+                @unknown default:
+                    fatalError()
                 }
-			}
+            }
 
-			return path
-		}
-	}
+            return path
+        }
+    }
 
 #endif
 
 public extension BezierPath {
+    /// Length of path in pt
+    var length: CGFloat {
+        return cgPath.length
+    }
 
-	/// Length of path in pt
-	public var length: CGFloat {
-
-		return cgPath.length
-	}
-
-	/// Get the point on the path at the given percentage
-	///
-	/// - Parameter percent: Percentage of path, between 0.0 and 1.0 (inclusive)
-	/// - Returns: Point on the path
-	public func point(at percent: CGFloat) -> CGPoint? {
-
-		return cgPath.point(at: percent)
-	}
-
+    /// Get the point on the path at the given percentage
+    ///
+    /// - Parameter percent: Percentage of path, between 0.0 and 1.0 (inclusive)
+    /// - Returns: Point on the path
+    func point(at percent: CGFloat) -> CGPoint? {
+        return cgPath.point(at: percent)
+    }
 }
 
 public extension CGPath {
+    /// Length of path in pt
+    var length: CGFloat {
+        return getLength(with: elements)
+    }
 
-	/// Length of path in pt
-	public var length: CGFloat {
-
-		return getLength(with: elements)
-	}
-
-	/// Get the point on the path at the given percentage
-	///
-	/// - Parameter percent: Percentage of path, between 0.0 and 1.0 (inclusive)
-	/// - Returns: Point on the path
-	public func point(at percent: CGFloat) -> CGPoint? {
-
-		return point(at: percent, with: elements)
-	}
-
+    /// Get the point on the path at the given percentage
+    ///
+    /// - Parameter percent: Percentage of path, between 0.0 and 1.0 (inclusive)
+    /// - Returns: Point on the path
+    func point(at percent: CGFloat) -> CGPoint? {
+        return point(at: percent, with: elements)
+    }
 }
 
 extension CGPath {
+    // MARK: - Internal
 
-	// MARK: - Internal
+    func point(at percent: CGFloat, with elements: [PathElement]) -> CGPoint? {
+        if percent < 0.0 || percent > 1.0 {
+            return nil
+        }
 
-	func point(at percent: CGFloat, with elements: [PathElement]) -> CGPoint? {
+        let percentLength = length * percent
+        var lengthTraversed: CGFloat = 0
 
-		if percent < 0.0 || percent > 1.0 {
-			return nil
-		}
+        var firstPointInSubpath: CGPoint?
 
-		let percentLength = length * percent
-		var lengthTraversed: CGFloat = 0
+        /// Holds current point on the path (must never be a control point)
+        var currentPoint: CGPoint?
 
-		var firstPointInSubpath: CGPoint?
+        for e in elements {
+            switch e {
+            case let .move(to: p0):
+                currentPoint = p0
 
-		/// Holds current point on the path (must never be a control point)
-		var currentPoint: CGPoint?
+                if firstPointInSubpath == nil {
+                    firstPointInSubpath = p0
+                }
 
-		for e in elements {
+            case let .addLine(to: p1):
 
-			switch(e) {
-			case let .move(to: p0):
-				currentPoint = p0
+                guard let p0 = currentPoint else {
+                    assertionFailure("Expected current point")
+                    break
+                }
 
-				if firstPointInSubpath == nil {
-					firstPointInSubpath = p0
-				}
+                let l = linearLength(p0: p0, p1: p1)
 
-				break
+                if lengthTraversed + l >= percentLength {
+                    let lengthInSubpath = percentLength - lengthTraversed
 
-			case let .addLine(to: p1):
+                    let t = lengthInSubpath / l
 
-				guard let p0 = currentPoint else {
-					assertionFailure("Expected current point")
-					break
-				}
+                    return linearPoint(t: t, p0: p0, p1: p1)
+                }
 
-				let l = linearLength(p0: p0, p1: p1)
+                lengthTraversed += l
 
-				if lengthTraversed + l >= percentLength {
+                currentPoint = p1
 
-					let lengthInSubpath = percentLength - lengthTraversed
+            case let .addQuadCurve(c1, to: p1):
 
-					let t = lengthInSubpath / l
+                guard let p0 = currentPoint else {
+                    assertionFailure("Expected current point")
+                    break
+                }
 
-					return linearPoint(t: t, p0: p0, p1: p1)
+                let l = quadCurveLength(p0: p0, c1: c1, p1: p1)
 
-				}
+                if lengthTraversed + l >= percentLength {
+                    let lengthInSubpath = percentLength - lengthTraversed
 
-				lengthTraversed += l
+                    let t = lengthInSubpath / l
+                    return quadCurvePoint(t: t, p0: p0, c1: c1, p1: p1)
+                }
 
-				currentPoint = p1
+                lengthTraversed += l
 
-				break
+                currentPoint = p1
 
-			case let .addQuadCurve(c1, to: p1):
+            case let .addCurve(c1, c2, to: p1):
 
-				guard let p0 = currentPoint else {
-					assertionFailure("Expected current point")
-					break
-				}
+                guard let p0 = currentPoint else {
+                    assertionFailure("Expected current point")
+                    break
+                }
 
-				let l = quadCurveLength(p0: p0, c1: c1, p1: p1)
+                let l = cubicCurveLength(p0: p0, c1: c1, c2: c2, p1: p1)
 
-				if lengthTraversed + l >= percentLength {
+                if lengthTraversed + l >= percentLength {
+                    let lengthInSubpath = percentLength - lengthTraversed
 
-					let lengthInSubpath = percentLength - lengthTraversed
+                    let t = lengthInSubpath / l
+                    return cubicCurvePoint(t: t, p0: p0, c1: c1, c2: c2, p1: p1)
+                }
 
-					let t = lengthInSubpath / l
-					return quadCurvePoint(t: t, p0: p0, c1: c1, p1: p1)
+                lengthTraversed += l
 
-				}
+                currentPoint = p1
 
-				lengthTraversed += l
+            case .closeSubpath:
 
-				currentPoint = p1
+                guard let p0 = currentPoint else {
+                    break
+                }
 
-				break
+                if let p1 = firstPointInSubpath {
+                    let l = linearLength(p0: p0, p1: p1)
 
-			case let .addCurve(c1, c2, to: p1):
+                    if lengthTraversed + l >= percentLength {
+                        let lengthInSubpath = percentLength - lengthTraversed
 
-				guard let p0 = currentPoint else {
-					assertionFailure("Expected current point")
-					break
-				}
+                        let t = lengthInSubpath / l
 
-				let l = cubicCurveLength(p0: p0, c1: c1, c2: c2, p1: p1)
+                        return linearPoint(t: t, p0: p0, p1: p1)
+                    }
 
-				if lengthTraversed + l >= percentLength {
+                    lengthTraversed += l
 
-					let lengthInSubpath = percentLength - lengthTraversed
+                    currentPoint = p1
+                }
 
-					let t = lengthInSubpath / l
-					return cubicCurvePoint(t: t, p0: p0, c1: c1, c2: c2, p1: p1)
+                firstPointInSubpath = nil
+            }
+        }
 
-				}
+        return nil
+    }
 
-				lengthTraversed += l
+    func getLength(with elements: [PathElement]) -> CGFloat {
+        var firstPointInSubpath: CGPoint?
 
-				currentPoint = p1
+        /// Holds current point on the path (must never be a control point)
+        var currentPoint: CGPoint?
 
-				break
+        var length: CGFloat = 0
 
-			case .closeSubpath:
+        for e in elements {
+            switch e {
+            case let .move(to: p0):
+                currentPoint = p0
 
-				guard let p0 = currentPoint else {
-					break
-				}
+                if firstPointInSubpath == nil {
+                    firstPointInSubpath = p0
+                }
 
-				if let p1 = firstPointInSubpath {
+            case let .addLine(to: p1):
 
-					let l = linearLength(p0: p0, p1: p1)
+                guard let p0 = currentPoint else {
+                    assertionFailure("Expected current point")
+                    break
+                }
 
-					if lengthTraversed + l >= percentLength {
+                length += linearLength(p0: p0, p1: p1)
 
-						let lengthInSubpath = percentLength - lengthTraversed
+                currentPoint = p1
 
-						let t = lengthInSubpath / l
+            case let .addQuadCurve(c1, to: p1):
 
-						return linearPoint(t: t, p0: p0, p1: p1)
+                guard let p0 = currentPoint else {
+                    assertionFailure("Expected current point")
+                    break
+                }
 
-					}
+                length += quadCurveLength(p0: p0, c1: c1, p1: p1)
 
-					lengthTraversed += l
+                currentPoint = p1
 
-					currentPoint = p1
+            case let .addCurve(c1, c2, to: p1):
 
-				}
+                guard let p0 = currentPoint else {
+                    assertionFailure("Expected current point")
+                    break
+                }
 
-				firstPointInSubpath = nil
+                length += cubicCurveLength(p0: p0, c1: c1, c2: c2, p1: p1)
 
-				break
+                currentPoint = p1
 
-			}
+            case .closeSubpath:
 
-		}
+                guard let p0 = currentPoint else {
+                    break
+                }
 
-		return nil
-	}
+                if let p1 = firstPointInSubpath {
+                    length += linearLength(p0: p0, p1: p1)
 
-	func getLength(with elements: [PathElement]) -> CGFloat {
+                    currentPoint = p1
+                }
 
-		var firstPointInSubpath: CGPoint?
+                firstPointInSubpath = nil
+            }
+        }
 
-		/// Holds current point on the path (must never be a control point)
-		var currentPoint: CGPoint?
+        return length
+    }
 
-		var length: CGFloat = 0
+    // MARK: - Linear
 
-		for e in elements {
+    func linearLength(p0: CGPoint, p1: CGPoint) -> CGFloat {
+        return p0.distance(to: p1)
+    }
 
-			switch(e) {
-			case let .move(to: p0):
-				currentPoint = p0
+    func linearPoint(t: CGFloat, p0: CGPoint, p1: CGPoint) -> CGPoint {
+        let x = linearValue(t: t, p0: p0.x, p1: p1.x)
+        let y = linearValue(t: t, p0: p0.y, p1: p1.y)
 
-				if firstPointInSubpath == nil {
-					firstPointInSubpath = p0
-				}
+        return CGPoint(x: x, y: y)
+    }
 
-				break
+    func linearValue(t: CGFloat, p0: CGFloat, p1: CGFloat) -> CGFloat {
+        var value: CGFloat = 0.0
 
-			case let .addLine(to: p1):
+        // (1-t) * p0 + t * p1
+        value += (1 - t) * p0
+        value += t * p1
 
-				guard let p0 = currentPoint else {
-					assertionFailure("Expected current point")
-					break
-				}
+        return value
+    }
 
-				length += linearLength(p0: p0, p1: p1)
+    // MARK: - Quadratic
 
-				currentPoint = p1
+    func quadCurveLength(p0: CGPoint, c1: CGPoint, p1: CGPoint) -> CGFloat {
+        var approxDist: CGFloat = 0
 
-				break
+        let approxSteps: CGFloat = 100
 
-			case let .addQuadCurve(c1, to: p1):
+        for i in 0 ..< Int(approxSteps) {
+            let t0 = CGFloat(i) / approxSteps
+            let t1 = CGFloat(i + 1) / approxSteps
 
-				guard let p0 = currentPoint else {
-					assertionFailure("Expected current point")
-					break
-				}
+            let a = quadCurvePoint(t: t0, p0: p0, c1: c1, p1: p1)
+            let b = quadCurvePoint(t: t1, p0: p0, c1: c1, p1: p1)
 
-				length += quadCurveLength(p0: p0, c1: c1, p1: p1)
+            approxDist += a.distance(to: b)
+        }
 
-				currentPoint = p1
+        return approxDist
+    }
 
-				break
+    func quadCurvePoint(t: CGFloat, p0: CGPoint, c1: CGPoint, p1: CGPoint) -> CGPoint {
+        let x = quadCurveValue(t: t, p0: p0.x, c1: c1.x, p1: p1.x)
+        let y = quadCurveValue(t: t, p0: p0.y, c1: c1.y, p1: p1.y)
 
-			case let .addCurve(c1, c2, to: p1):
+        return CGPoint(x: x, y: y)
+    }
 
-				guard let p0 = currentPoint else {
-					assertionFailure("Expected current point")
-					break
-				}
+    func quadCurveValue(t: CGFloat, p0: CGFloat, c1: CGFloat, p1: CGFloat) -> CGFloat {
+        var value: CGFloat = 0.0
 
-				length += cubicCurveLength(p0: p0, c1: c1, c2: c2, p1: p1)
+        // (1-t)^2 * p0 + 2 * (1-t) * t * c1 + t^2 * p1
+        value += pow(1 - t, 2) * p0
+        value += 2 * (1 - t) * t * c1
+        value += pow(t, 2) * p1
 
-				currentPoint = p1
+        return value
+    }
 
-				break
+    // MARK: - Cubic
 
-			case .closeSubpath:
+    func cubicCurveLength(p0: CGPoint, c1: CGPoint, c2: CGPoint, p1: CGPoint) -> CGFloat {
+        var approxDist: CGFloat = 0
 
-				guard let p0 = currentPoint else {
-					break
-				}
+        let approxSteps: CGFloat = 100
 
-				if let p1 = firstPointInSubpath {
+        for i in 0 ..< Int(approxSteps) {
+            let t0 = CGFloat(i) / approxSteps
+            let t1 = CGFloat(i + 1) / approxSteps
 
-					length += linearLength(p0: p0, p1: p1)
+            let a = cubicCurvePoint(t: t0, p0: p0, c1: c1, c2: c2, p1: p1)
+            let b = cubicCurvePoint(t: t1, p0: p0, c1: c1, c2: c2, p1: p1)
 
-					currentPoint = p1
+            approxDist += a.distance(to: b)
+        }
 
-				}
+        return approxDist
+    }
 
-				firstPointInSubpath = nil
+    func cubicCurvePoint(t: CGFloat, p0: CGPoint, c1: CGPoint, c2: CGPoint, p1: CGPoint) -> CGPoint {
+        let x = cubicCurveValue(t: t, p0: p0.x, c1: c1.x, c2: c2.x, p1: p1.x)
+        let y = cubicCurveValue(t: t, p0: p0.y, c1: c1.y, c2: c2.y, p1: p1.y)
 
-				break
+        return CGPoint(x: x, y: y)
+    }
 
-			}
+    func cubicCurveValue(t: CGFloat, p0: CGFloat, c1: CGFloat, c2: CGFloat, p1: CGFloat) -> CGFloat {
+        var value: CGFloat = 0.0
 
-		}
+        // (1-t)^3 * p0 + 3 * (1-t)^2 * t * c1 + 3 * (1-t) * t^2 * c2 + t^3 * p1
+        value += pow(1 - t, 3) * p0
+        value += 3 * pow(1 - t, 2) * t * c1
+        value += 3 * (1 - t) * pow(t, 2) * c2
+        value += pow(t, 3) * p1
 
-		return length
-
-	}
-
-	// MARK: - Linear
-
-	func linearLength(p0: CGPoint, p1: CGPoint) -> CGFloat {
-		return p0.distance(to: p1)
-	}
-
-	func linearPoint(t: CGFloat, p0: CGPoint, p1: CGPoint) -> CGPoint {
-
-		let x = linearValue(t: t, p0: p0.x, p1: p1.x)
-		let y = linearValue(t: t, p0: p0.y, p1: p1.y)
-
-		return CGPoint(x: x, y: y)
-	}
-
-	func linearValue(t: CGFloat, p0: CGFloat, p1: CGFloat) -> CGFloat {
-
-		var value: CGFloat = 0.0
-
-		// (1-t) * p0 + t * p1
-		value += (1-t) * p0
-		value += t * p1
-
-		return value
-
-	}
-
-	// MARK: - Quadratic
-
-	func quadCurveLength(p0: CGPoint, c1: CGPoint, p1: CGPoint) -> CGFloat {
-
-		var approxDist: CGFloat = 0
-
-		let approxSteps: CGFloat = 100
-
-		for i in 0..<Int(approxSteps) {
-
-			let t0 = CGFloat(i) / approxSteps
-			let t1 = CGFloat(i+1) / approxSteps
-
-			let a = quadCurvePoint(t: t0, p0: p0, c1: c1, p1: p1)
-			let b = quadCurvePoint(t: t1, p0: p0, c1: c1, p1: p1)
-
-			approxDist += a.distance(to: b)
-
-		}
-
-		return approxDist
-	}
-
-	func quadCurvePoint(t: CGFloat, p0: CGPoint, c1: CGPoint, p1: CGPoint) -> CGPoint {
-
-		let x = quadCurveValue(t: t, p0: p0.x, c1: c1.x, p1: p1.x)
-		let y = quadCurveValue(t: t, p0: p0.y, c1: c1.y, p1: p1.y)
-
-		return CGPoint(x: x, y: y)
-
-	}
-
-	func quadCurveValue(t: CGFloat, p0: CGFloat, c1: CGFloat, p1: CGFloat) -> CGFloat {
-
-		var value: CGFloat = 0.0
-
-		// (1-t)^2 * p0 + 2 * (1-t) * t * c1 + t^2 * p1
-		value += pow(1-t, 2) * p0
-		value += 2 * (1-t) * t * c1
-		value += pow(t, 2) * p1
-
-		return value
-
-	}
-
-	// MARK: - Cubic
-
-	func cubicCurveLength(p0: CGPoint, c1: CGPoint, c2: CGPoint, p1: CGPoint) -> CGFloat {
-
-		var approxDist: CGFloat = 0
-
-		let approxSteps: CGFloat = 100
-
-		for i in 0..<Int(approxSteps) {
-
-			let t0 = CGFloat(i) / approxSteps
-			let t1 = CGFloat(i+1) / approxSteps
-
-			let a = cubicCurvePoint(t: t0, p0: p0, c1: c1, c2: c2, p1: p1)
-			let b = cubicCurvePoint(t: t1, p0: p0, c1: c1, c2: c2, p1: p1)
-
-			approxDist += a.distance(to: b)
-
-		}
-
-		return approxDist
-
-	}
-
-	func cubicCurvePoint(t: CGFloat, p0: CGPoint, c1: CGPoint, c2: CGPoint, p1: CGPoint) -> CGPoint {
-
-		let x = cubicCurveValue(t: t, p0: p0.x, c1: c1.x, c2: c2.x, p1: p1.x)
-		let y = cubicCurveValue(t: t, p0: p0.y, c1: c1.y, c2: c2.y, p1: p1.y)
-
-		return CGPoint(x: x, y: y)
-
-	}
-
-	func cubicCurveValue(t: CGFloat, p0: CGFloat, c1: CGFloat, c2: CGFloat, p1: CGFloat) -> CGFloat {
-
-		var value: CGFloat = 0.0
-
-		// (1-t)^3 * p0 + 3 * (1-t)^2 * t * c1 + 3 * (1-t) * t^2 * c2 + t^3 * p1
-		value += pow(1-t, 3) * p0
-		value += 3 * pow(1-t, 2) * t * c1
-		value += 3 * (1-t) * pow(t, 2) * c2
-		value += pow(t, 3) * p1
-
-		return value
-	}
-
+        return value
+    }
 }
 
 extension CGPoint {
-
-	func distance(to point: CGPoint) -> CGFloat {
-		let a = self
-		let b = point
-		return hypot(a.x-b.x, a.y-b.y)
-	}
-
+    func distance(to point: CGPoint) -> CGFloat {
+        let a = self
+        let b = point
+        return hypot(a.x - b.x, a.y - b.y)
+    }
 }
