@@ -49,7 +49,7 @@ extension CGPath {
 
 	typealias PathApplier = @convention(block) (UnsafePointer<CGPathElement>) -> Void
 
-	func apply(with applier: PathApplier) {
+	func apply(with applier: @escaping PathApplier) {
 
 		let callback: @convention(c) (UnsafeMutableRawPointer, UnsafePointer<CGPathElement>) -> Void = { (info, element) in
 
@@ -58,7 +58,8 @@ extension CGPath {
 
 		}
 
-		self.apply(info: unsafeBitCast(applier, to: UnsafeMutableRawPointer.self), function: unsafeBitCast(callback, to: CGPathApplierFunction.self))
+		self.apply(info: unsafeBitCast(applier, to: UnsafeMutableRawPointer.self),
+                   function: unsafeBitCast(callback, to: CGPathApplierFunction.self))
 	}
 
 	var elements: [PathElement] {

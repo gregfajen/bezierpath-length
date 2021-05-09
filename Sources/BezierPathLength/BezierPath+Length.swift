@@ -31,19 +31,21 @@ import CoreGraphics
 
 				switch type {
 
-				case .moveToBezierPathElement:
+                    case .moveTo:
 					path.move(to: points[0])
 
-				case .lineToBezierPathElement:
+                    case .lineTo:
 					path.addLine(to: points[0])
 
-				case .curveToBezierPathElement:
+                    case .curveTo:
 					path.addCurve(to: points[2], control1: points[0], control2: points[1])
 
-				case .closePathBezierPathElement:
+                    case .closePath:
 					path.closeSubpath()
 
-				}
+                    @unknown default:
+                        fatalError()
+                }
 			}
 
 			return path
